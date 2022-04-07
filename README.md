@@ -7,6 +7,7 @@ This implementation of a message chat will utilize MongoDB and FastAPI while imp
 * FastAPI Auth
     * Any access to the database needs to be authenticated
     * [FastAPI Auth Example](https://fastapi.tiangolo.com/advanced/security/http-basic-auth/?h=auth)
+    * [OAuth2 Sample](https://fastapi.tiangolo.com/tutorial/security/simple-oauth2/)
 * Simple User Interface
     * [Jinja Template HTML](https://www.ibm.com/docs/en/qradar-common?topic=1-jinja2-templates)
 * Removing Objects
