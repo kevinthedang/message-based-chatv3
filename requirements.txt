@@ -1,0 +1,4 @@
+fastapi[all]
+pymongo==4.0.2
+jose
+cryptography
