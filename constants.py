@@ -1,3 +1,8 @@
+''' Task List for Constants:
+TODO: organize the constants
+TODO: implement constants where needed
+'''
+
 # string constants
 MONGO_DB_HOST = '34.94.157.136'
 MONGO_DB_USER = 'class'
@@ -17,14 +22,17 @@ MONGO_DB = 'cpsc313'
 
 # integer constants
 MONGO_DB_PORT = 27017
-ROOM_TYPE_PUBLIC = 100
-ROOM_TYPE_PRIVATE = 200
+# this constant below might be useless
+ROOM_TYPE_OPEN = 1
+ROOM_TYPE_PUBLIC = 2
+ROOM_TYPE_PRIVATE = 3
 GET_ALL_MESSAGES = -1
 CHAT_ROOM_INDEX_NOT_FOUND = -1
 RIGHT_SIDE_OF_DEQUE = -1
 RANGE_STEP = -1
-PRIVATE_MESSAGE = 200
-PUBLIC_MESSAGE = 100
+PUBLIC_MESSAGE = 10
+PRIVATE_MESSAGE = 20
+DIRECT_MESSAGE = 30
 EMPTY = 0
 
 # possibly unused constants

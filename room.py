@@ -9,6 +9,14 @@ from pymongo import MongoClient, ReturnDocument
 from collections import deque
 from constants import *
 
+''' Task List for this file:
+TODO: When reading in a message, we may want to move the the sequence number to the chatmessage class
+        rather than the message property class, if this breaks we can try to do a bubble sort algorithm.
+TODO: we want to remove a message by the user. so when taking a list of messages from a room, 
+        we want to filter out the message by the user, most likely from the blacklist
+TODO: we want to also search for a message by user id and return it
+'''
+
 logging.basicConfig(filename='message_chat.log', level=logging.DEBUG, format = LOG_FORMAT)
 
 class MessageProperties():

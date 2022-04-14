@@ -5,6 +5,11 @@ from datetime import date, datetime
 from pymongo import MongoClient
 from constants import *
 
+''' Task List for this class:
+TODO: we want to keep a list of blocked users for a certain user (aka a blacklist),
+        this will just be updated and stored into Mongo.
+'''
+
 logging.basicConfig(filename='message_chat.log', level=logging.DEBUG, format = LOG_FORMAT, filemode = 'w')
         
 class ChatUser():

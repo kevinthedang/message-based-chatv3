@@ -7,7 +7,20 @@ from fastapi.templating import Jinja2Templates
 from room import *
 from constants import *
 from users import *
+''' Task List for this file:
+TODO: Implement a basic authentication: (username and password for this client), 
+        possibly just in my constants or a secret file that only belongs to me. This should
+        only be handled in API (check to make sure)
+TODO: implement a way to register rooms and register users.
+TODO: when deleting users, we want to keep a flag variable in the dictionary called
+        "removed" that will hold a boolean value if they have been removed 
+        (this is so the user can be restored to the list of active users)
+TODO: for testing, we want to include metrics now, for example, getting the time of an app
+        and returning the value for the latency of it running. 
+        Another thing can be the amount of messages that is returned from get_messages.
+'''
 
+# do I need this constant?
 MY_IPADDRESS = ""
 
 ''' Reasons for global variables:
@@ -171,6 +184,8 @@ async def send_message(room_name: str, message: str, from_alias: str, to_alias: 
         logging.error(f'Unknown Error when sending {message} to {to_alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error sending {message} to {to_alias}.'}, status_code = 400)
 
+
+# do I need this code below? auth will handle the username and password
 def main():
     ''' Main method to get the current user alias
     '''
