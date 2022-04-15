@@ -1,5 +1,7 @@
+from curses import use_default_colors
 import queue
 import logging
+from threading import currentThread
 from types import new_class
 from constants import *
 from datetime import date, datetime
@@ -7,8 +9,8 @@ from pymongo import MongoClient
 from constants import *
 
 ''' Task List for this class:
-TODO: we want to keep a list of blocked users for a certain user (aka a blacklist),
-        this will just be updated and stored into Mongo.
+TODO: Look at append, restore, persist and adjust the 
+        parameters based on the new Chatuser instance
 '''
 
 logging.basicConfig(filename='message_chat.log', level=logging.DEBUG, format = LOG_FORMAT, filemode = 'w')
@@ -16,7 +18,7 @@ logging.basicConfig(filename='message_chat.log', level=logging.DEBUG, format = L
 class ChatUser():
     """ class for users of the chat system. Users must be registered 
     """
-    def __init__(self, alias: str, user_id = None, email: str = '', blacklist: list = [], create_time: datetime = datetime.now(), modify_time: datetime = datetime.now()) -> None:
+    def __init__(self, alias: str, user_id = None, email: str = '', blacklist: list = [], removed: bool = False, create_time: datetime = datetime.now(), modify_time: datetime = datetime.now()) -> None:
         self.__alias = alias
         self.__user_id = user_id
         self.__email = email
@@ -24,6 +26,7 @@ class ChatUser():
         self.__modify_time = modify_time
         self.__hash_pass = ''
         self.__blacklist = blacklist
+        self.__removed = removed
         if self.__user_id is not None:
             self.__dirty = False
         else:
@@ -79,6 +82,16 @@ class ChatUser():
         self.__hash_pass = new_password
         self.dirty = True
 
+    @property
+    def removed(self):
+        return self.__removed
+
+    @removed.setter
+    def removed(self, new_value):
+        if type(new_value) is bool:
+            self.__removed = new_value
+            self.dirty = True
+
     def add_alias_to_blacklist(self, alias) -> bool:
         ''' This method will add a user's alias to the current user's blacklist
             given that the alias is not already in the users blacklist
@@ -117,7 +130,7 @@ class UserList():
     def __init__(self, list_name: str = DEFAULT_USER_LIST_NAME) -> None:
         self.__list_name = list_name
         self.__user_list = list()
-        self.__mongo_client = MongoClient('mongodb://34.94.157.136:27017/')
+        self.__mongo_client = MongoClient(f'mongodb://{MONGO_DB_HOST}:{MONGO_DB_PORT}/')
         self.__mongo_db = self.__mongo_client.MONGO_DB
         self.__mongo_collection = self.__mongo_db.users  
         if self.__restore() is True:
@@ -134,6 +147,11 @@ class UserList():
     @property
     def user_list(self):
         return self.__user_list
+
+    # property returns the id of the userlist
+    @property
+    def id(self):
+        return self.__id
 
     # This property is to get the list of user_aliases
     @property
@@ -164,6 +182,11 @@ class UserList():
             self.__dirty = new_value
             if new_value is True:
                 self.__modify_time = datetime.now()
+
+    def __len__(self):
+        ''' This method will return the size of the userlist
+        '''
+        return len(self.user_list)
     
     def register(self, new_alias: str) -> ChatUser:
         """ This method will just return a new ChatUser that will need to be added to the UserList
@@ -182,18 +205,17 @@ class UserList():
         '''
         if (user := self.get(alias_to_remove)) is None:
             return user
-        #user.
+        user.removed = True
         return user
-
 
     def get(self, target_alias: str) -> ChatUser:
         ''' This method will return the user from the user_list
             NOTE: this method will utilize the index to find the user
         '''
-        for user_index in range(0, len(self.__user_list)):
-            if target_alias == self.__user_list[user_index].alias:
+        for current_user in self.user_list:
+            if target_alias == current_user.alias:
                 logging.debug(f'User {target_alias} was found in user list {self.__list_name}.')
-                return self.__user_list[user_index]
+                return current_user
         logging.debug(f'User {target_alias} was not found in user list {self.__list_name}.')
         return None
 
@@ -206,7 +228,6 @@ class UserList():
 
     def append(self, new_user: ChatUser) -> bool:
         ''' This method will add the user to the to the list of users
-            NOTE: May want to make sure that the new_user is valid
             TODO: make sure the user does not already exist in the users (check the user_list_alias or user_list)
         '''
         if new_user is None:
