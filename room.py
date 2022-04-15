@@ -1,6 +1,3 @@
-import pika
-import json
-import pika.exceptions
 import logging
 from users import *
 from constants import *
@@ -8,6 +5,7 @@ from datetime import date, datetime
 from pymongo import MongoClient, ReturnDocument
 from collections import deque
 from constants import *
+from statsd import StatsClient
 
 ''' Task List for this file:
 TODO: When reading in a message, we may want to move the the sequence number to the chatmessage class
@@ -106,8 +104,9 @@ class ChatMessage():
         return self.__mess_id
 
     @dirty.setter
-    def dirty(self, new_value: bool):
-        self.__dirty = new_value
+    def dirty(self, new_value):
+        if type(new_value) is bool:
+            self.__dirty = new_value
 
     def to_dict(self):
         mess_props_dict = self.__mess_props.to_dict()
@@ -125,8 +124,6 @@ class ChatRoom(deque):
         super(ChatRoom, self).__init__()
         self.__room_name = room_name
         self.__user_list = UserList()
-        self.__dirty = False
-        self.__owner_alias = owner_alias
         # Set up mongo - client, db, collection, sequence_collection
         self.__mongo_client = MongoClient(host = MONGO_DB_HOST, port = MONGO_DB_PORT, username = MONGO_DB_USER, password = MONGO_DB_PASS, authSource = MONGO_DB_AUTH_SOURCE, authMechanism = MONGO_DB_AUTH_MECHANISM)
         self.__mongo_db = self.__mongo_client.detest
@@ -136,22 +133,33 @@ class ChatRoom(deque):
             self.__mongo_collection = self.__mongo_db.create_collection(self.__room_name)
         # Restore from mongo if possible, if not (or we're creating new) then setup ChatRoom properties
         if create_new is True or self.restore() is False:
+            self.__room_type = room_type
+            self.__owner_alias = owner_alias
+            self.__room_id = None
             self.__create_time = datetime.now()
             self.__modify_time = datetime.now()
-            self.__room_type = room_type
-            if member_list is not None:
-                self.__member_list = member_list
-                if owner_alias not in member_list:
-                    member_list.append(owner_alias)
-            else:
-                self.__member_list = list()
-                self.__member_list.append(owner_alias)
+            self.__member_list = member_list
             self.__dirty = True
+            self.__deleted = False
+            for current_member in member_list:
+                if self.__user_list.get(current_member) is not None:
+                    self.__member_list.append(current_member)
+                else:
+                    '''put a log here to log an error for the member existence'''
+
+    def __str__(self):
+        return f'Chat room with name {self.__room_name}.'
 
     # property to get the name of a room
     @property
     def room_name(self):
         return self.__room_name
+
+    @room_name.setter
+    def name(self, new_name):
+        if len(new_name) > 1:
+            self.__room_name = new_name
+            self.__dirty = True
 
     # property to get the list of users for a room
     @property
@@ -182,6 +190,26 @@ class ChatRoom(deque):
     @property
     def dirty(self):
         return self.__dirty
+
+    @dirty.setter
+    def dirty(self, new_value):
+        if type(new_value) is bool:
+            self.__dirty = new_value
+            self.__modify_time = datetime.now()
+
+    @property
+    def deleted(self):
+        return self.__deleted
+
+    @deleted.setter
+    def deleted(self, new_value):
+        if type(new_value) is bool:
+            self.__deleted = new_value
+            self.dirty = True
+
+    @property
+    def total_messages(self):
+        return len(self)
 
     def __get_next_sequence_num(self):
         """ This is the method that you need for managing the sequence. Note that there is a separate collection for just this one document
