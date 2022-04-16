@@ -41,30 +41,6 @@ async def index():
     """
     return { 'message' : { 'from' : 'kevin', 'to' : 'you :)' }}
 
-@app.get("/page/send", status_code=200)
-async def send_form(request: Request):
-    """ HTML GET page form sending a message
-    """
-    pass
-
-@app.post("/page/send", status_code=201)
-async def get_form(request: Request, room_choice: str = Form(...), message: str = Form(...), alias: str = Form(...)):
-    """ HTML POST page for sending a message
-    """
-    pass
-
-@app.get("/page/messages", status_code=200)
-async def form_messages(request: Request, room_name: str = DEFAULT_PUBLIC_ROOM):
-    """ HTML GET page for seeing messages
-    """
-    pass
-
-@app.post("/page/messages", status_code=201)
-async def form_messages(request: Request, room_name: str = Form(...)):
-    """ HTML POST page for seeing messages in a different room or different quantities
-    """
-    pass
-
 @app.get("/messages/", status_code = 200)
 async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_ALL_MESSAGES):
     """ API for getting messages from a room

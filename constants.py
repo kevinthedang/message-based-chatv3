@@ -37,6 +37,7 @@ EMPTY = 0
 INVALID_USER = -1
 MEMBER_FOUND = 0
 MEMBER_ADDED = 1
+SEQUENCE_NUMBER_NOT_FOUND = -1
 
 # possibly unused constants
 LOG_FORMAT = '%(levelname)s -- %(message)s'
