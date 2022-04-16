@@ -326,6 +326,64 @@ class ChatRoom(deque):
             logging.debug(f'Alias {from_alias} is not a member of the private chat room {self.__room_name}.')
             return False
 
+    def find_member(self, member_alias) -> str:
+        ''' This method will find the member within the current ChatRoom instance
+            NOTE: if the member is not found, return none
+            TODO: log the possibility of not finding the member in the list
+        '''
+        for current_member in self.__member_list:
+            if current_member == member_alias:
+                return current_member
+        # member was not found in the list of members (log this)
+        return None
+
+    def add_member(self, member_alias) -> int:
+        ''' This method will attempt to add a member alias to the list of
+            members for a ChatRoom instance.
+            TODO: log for each case below
+        '''
+        if self.__user_list.get(member_alias) is None:
+            return INVALID_USER
+        if self.find_member(member_alias) is not None:
+            return MEMBER_FOUND
+        self.__member_list.append(member_alias)
+        return MEMBER_ADDED
+
+    def remove_member(self, member_alias):
+        ''' This method will remove the member alias from the list of members for
+            a ChatRoom instance
+            TODO: log the situation below
+        '''
+        if member_alias in self.__member_list:
+            self.__member_list.remove(member_alias)
+        else:
+            '''Put a log error here for a member not found in the list'''
+
+    def find_message_by_alias(self, alias: str) -> list:
+        ''' This method will return a list of messages from the deque if the message was sent
+            by the alias provided.
+            NOTE: the list can be empty
+            NOTE: possibly check if the alias provided is a valid user?
+        '''
+        message_list = list()
+        for current_chat_message in list(self):
+            current_chat_message: ChatMessage
+            if current_chat_message.message_properties.from_user == alias:
+                message_list.append(current_chat_message)
+        return message_list
+
+    def find_message_by_keyword(self, keyword: str) -> list:
+        ''' This method will return a list of messages from the deque if the message contains
+            the keyword provided by the user.
+            NOTE: how can we handle this if the keyword is None/empty?
+        '''
+        message_list = list()
+        for current_chat_message in list(self):
+            current_chat_message: ChatMessage
+            if keyword in current_chat_message.message:
+                message_list.append(current_chat_message)
+        return message_list
+
     def restore(self) -> bool:
         ''' This method will restore the metadata and the messages that a certain ChatRoom instance needs
             NOTE: a ChatRoom will contain it's own collection, if we are creating a new collection, we don't

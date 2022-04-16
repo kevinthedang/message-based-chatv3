@@ -34,6 +34,9 @@ PUBLIC_MESSAGE = 10
 PRIVATE_MESSAGE = 20
 DIRECT_MESSAGE = 30
 EMPTY = 0
+INVALID_USER = -1
+MEMBER_FOUND = 0
+MEMBER_ADDED = 1
 
 # possibly unused constants
 LOG_FORMAT = '%(levelname)s -- %(message)s'
