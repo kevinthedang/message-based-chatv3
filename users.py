@@ -7,7 +7,7 @@ from constants import *
 ''' Task List for this class: :)
 '''
 
-logging.basicConfig(filename='message_chat.log', level=logging.DEBUG, format = LOG_FORMAT, filemode = 'w')
+logging.basicConfig(filename='message_chat.log', level=logging.DEBUG, format = LOG_FORMAT)
         
 class ChatUser():
     """ class for users of the chat system. Users must be registered 
