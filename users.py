@@ -116,8 +116,8 @@ class UserList():
         self.__list_name = list_name
         self.__user_list = list()
         self.__mongo_client = MongoClient(f'mongodb://{MONGO_DB_HOST}:{MONGO_DB_PORT}/')
-        self.__mongo_db = self.__mongo_client.MONGO_DB
-        self.__mongo_collection = self.__mongo_db.MONGO_DB_CLASS_USERS
+        self.__mongo_db = self.__mongo_client.get_database(MONGO_DB)
+        self.__mongo_collection = self.__mongo_db.get_collection(MONGO_DB_CLASS_USERS)
         if self.__restore() is True:
             logging.debug('UserList Document was found in the collection.')
             self.__dirty = False
@@ -250,7 +250,7 @@ class UserList():
                                     blacklist = current_user_metadata['blacklist'],
                                     removed = current_user_metadata['removed'])
             logging.debug(current_user_metadata['alias'] + ' was added to the user list.')
-            self.append(new_chat_user)
+            self.__user_list.append(new_chat_user)
         logging.info(f'All users in {self.__list_name} added to the user list.')
         return True
 
