@@ -12,10 +12,9 @@ logging.basicConfig(filename='message_chat.log', level=logging.DEBUG, format = L
 class ChatUser():
     """ class for users of the chat system. Users must be registered 
     """
-    def __init__(self, alias: str, user_id = None, email: str = '', blacklist: list = [], removed: bool = False, create_time: datetime = datetime.now(), modify_time: datetime = datetime.now()) -> None:
+    def __init__(self, alias: str, user_id = None, blacklist: list = [], removed: bool = False, create_time: datetime = datetime.now(), modify_time: datetime = datetime.now()) -> None:
         self.__alias = alias
         self.__user_id = user_id
-        self.__email = email
         self.__create_time = create_time
         self.__modify_time = modify_time
         self.__hash_pass = ''
@@ -43,15 +42,6 @@ class ChatUser():
     @user_id.setter
     def user_id(self, new_id):
         self.__user_id = new_id
-        self.dirty = True
-
-    @property
-    def email(self):
-        return self.__email
-
-    @email.setter
-    def email(self, new_email):
-        self.__email = new_email
         self.dirty = True
     
     @property
@@ -116,7 +106,6 @@ class ChatUser():
                 'blacklist': self.blacklist,
                 'create_time': self.__create_time,
                 'modify_time': self.__modify_time,
-                'email': self.__email,
                 'removed': self.__removed
         }
         
@@ -124,15 +113,15 @@ class UserList():
     """ List of users, inheriting list class
     """
     def __init__(self, list_name: str = DEFAULT_USER_LIST_NAME) -> None:
+        self.__list_name = list_name
         self.__user_list = list()
         self.__mongo_client = MongoClient(f'mongodb://{MONGO_DB_HOST}:{MONGO_DB_PORT}/')
         self.__mongo_db = self.__mongo_client.MONGO_DB
-        self.__mongo_collection = self.__mongo_db.users  
+        self.__mongo_collection = self.__mongo_db.MONGO_DB_CLASS_USERS
         if self.__restore() is True:
-            logging.info('UserList Document was found in the collection.')
+            logging.debug('UserList Document was found in the collection.')
             self.__dirty = False
         else:
-            self.__list_name = list_name
             self.__id = None
             self.__create_time = datetime.now()
             self.__modify_time = datetime.now()
@@ -189,6 +178,7 @@ class UserList():
             NOTE: we check if the user already exists, if so, don't make another user with that alias
         """
         if (current_user := self.get(new_alias)) is not None:
+            logging.warning(f'{new_alias} is already registered.')
             return current_user
         if len(new_alias) > 2:
             logging.debug(f'Registered new user with name {new_alias}.')
@@ -205,6 +195,8 @@ class UserList():
         if (user := self.get(alias_to_remove)) is None:
             return user
         user.removed = True
+        self.dirty = True
+        self.__persist()
         return user
 
     def get(self, target_alias: str) -> ChatUser:
@@ -241,9 +233,9 @@ class UserList():
             NOTE: we may not need the user aliases since we just want to restore all of the users          
         """
         logging.info(f'Attempting to restore any user list metadata...')
-        user_list_metadata = self.__mongo_collection.find_one( { 'list_name': { '$exists': 'true'} })
+        user_list_metadata = self.__mongo_collection.find_one({ 'list_name': { '$exists': 'true'}})
         if user_list_metadata is None:
-            logging.debug('No user list was not found in the mongo collection.')
+            logging.warning('No user list was not found in the mongo collection.')
             return False
         self.__list_name = user_list_metadata['list_name']
         self.__id = user_list_metadata['_id']
@@ -256,7 +248,6 @@ class UserList():
                                     create_time = current_user_metadata['create_time'],
                                     modify_time = current_user_metadata['modify_time'],
                                     blacklist = current_user_metadata['blacklist'],
-                                    email = current_user_metadata['email'],
                                     removed = current_user_metadata['removed'])
             logging.debug(current_user_metadata['alias'] + ' was added to the user list.')
             self.append(new_chat_user)
@@ -276,7 +267,7 @@ class UserList():
             logging.debug(f'New user list {self.__list_name} added to the collection.')
         else:
             if self.__dirty == True:
-                self.__mongo_collection.replace_one(filter = { 'list_name': self.__list_name},
+                self.__mongo_collection.replace_one(filter = { 'list_name': self.id},
                                                     replacement = { 'list_name': self.__list_name,
                                                                 'create_time': self.__create_time, 
                                                                 'modify_time': self.__modify_time},

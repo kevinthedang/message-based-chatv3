@@ -19,13 +19,13 @@ DEFAULT_USER_LIST_NAME = 'global'
 DEFAULT_OWNER_ALIAS = 'kevin'
 MONGO_DB_TEST = 'detest'
 MONGO_DB = 'cpsc313'
+MONGO_USER_COLLECTION = 'global'
 
 # integer constants
 MONGO_DB_PORT = 27017
 # this constant below might be useless
-ROOM_TYPE_OPEN = 1
-ROOM_TYPE_PUBLIC = 2
-ROOM_TYPE_PRIVATE = 3
+ROOM_TYPE_PUBLIC = 1
+ROOM_TYPE_PRIVATE = 2
 GET_ALL_MESSAGES = -1
 CHAT_ROOM_INDEX_NOT_FOUND = -1
 RIGHT_SIDE_OF_DEQUE = -1
@@ -38,6 +38,9 @@ INVALID_USER = -1
 MEMBER_FOUND = 0
 MEMBER_ADDED = 1
 SEQUENCE_NUMBER_NOT_FOUND = -1
+
+# boolean constants
+REMOVED_ROOM = True
 
 # possibly unused constants
 LOG_FORMAT = '%(levelname)s -- %(message)s'

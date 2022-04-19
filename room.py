@@ -123,7 +123,7 @@ class ChatRoom(deque):
             this is assuming an existing instance. The opposite (owner_alias set and user_alias empty) means we're creating new
             members is always optional, and room_type is only relevant if we're creating new.
     """
-    def __init__(self, room_name: str, member_list: list = None, owner_alias: str = "", room_type: int = ROOM_TYPE_PRIVATE, create_new: bool = False) -> None:
+    def __init__(self, room_name: str, member_list: list = [], owner_alias: str = "", room_type: int = ROOM_TYPE_PRIVATE, create_new: bool = False) -> None:
         super(ChatRoom, self).__init__()
         self.__room_name = room_name
         self.__user_list = UserList()
@@ -271,16 +271,15 @@ class ChatRoom(deque):
             logging.debug(f'Message {message_right} was found on the deque.')
             return message_right
 
-    def find_message(self, message_text: str) -> ChatMessage:
+    def find_message(self, user_alias: str, message_text: str) -> ChatMessage:
         ''' Traverse through the deque of the Chatroom and find the ChatMessage 
                 with the message_text input from the user.
-            TODO: Understand how the deque works and how to traverse the deque.
-            NOTE: To traverse through the deque, we can use list(self) as an iterable to find the message
-            NOTE: an example would be (for current_message in list(self))
         '''
         for current_message in list(self):
             if current_message.message == message_text:
-                logging.debug(f'found {message_text} in deque.')
+                logging.debug(f'found "{message_text}" in deque.')
+                if current_message.message_properties.from_user in self.__user_list.get(user_alias):
+                    logging.warning(f'The message was from a user from the user_aliases blacklist, aborting.')
                 return current_message
         logging.debug(f'{message_text} was not found in the deque.')
         return None
@@ -289,12 +288,18 @@ class ChatRoom(deque):
         ''' This method will get num_messages from the deque and get their text, objects and a total count of the messages
             NOTE: total # of messages seems to just be num messages, but if getting all then just return the length of the list
             NOTE: indecies 0 and 1 is to access the values in the tuple for the objects and the number of objects
-            NOTE: If room_type is public, the user may get messages from the chat
         '''
         # return message texts, full message objects, and total # of messages
         if user_alias not in self.__member_list and self.__room_type is ROOM_TYPE_PRIVATE:
             logging.warning(f'User with alias {user_alias} is not a member of {self.__room_name}.')
             return [], [], 0
+        current_user = self.__user_list.get(user_alias)
+        '''IMPLEMENT GETTING MESSAGES WITH REGARD TO A BLACKLIST (AND IN MESSAGE OBJECTS) *******************
+        OR this is handled in the API (mst)
+        '''
+
+
+
         if return_objects is True:
             logging.debug('Returning messages with the message objects.')
             message_objects = self.__get_message_objects(num_messages = num_messages)
@@ -362,7 +367,7 @@ class ChatRoom(deque):
         # member was not found in the list of members (log this)
         return None
 
-    def add_member(self, member_alias) -> int:
+    def add_member(self, member_alias: str) -> int:
         ''' This method will attempt to add a member alias to the list of
             members for a ChatRoom instance.
             TODO: log for each case below
@@ -382,7 +387,7 @@ class ChatRoom(deque):
         if member_alias in self.__member_list:
             self.__member_list.remove(member_alias)
         else:
-            '''Put a log error here for a member not found in the list'''
+            logging.warning(f'"{member_alias}" was not found in the member list')
 
     def find_message_by_sequence_num(self, sequence_num: int) -> ChatMessage:
         ''' This method will use binary search to find the message by the sequence number.
@@ -468,13 +473,13 @@ class ChatRoom(deque):
                 - The metadata
                 - The messages in the room.
             NOTE: we want to iterate through the deque
-            TODO: understand how the sequence number is assigned
         '''
         logging.info(f'Beginning the persistence process for a chat room: {self.__room_name}.')
         if self.__mongo_collection.find_one({ 'room_name': self.__room_name }) is None:
             self.__room_id = self.__mongo_collection.insert_one({'room_name':self.__room_name,
                                                                 'owner_alias': self.__owner_alias,
                                                                 'room_type': self.__room_type,
+                                                                'deleted': self.deleted,
                                                                 'member_list': self.__member_list,
                                                                 'create_time': self.__create_time,
                                                                 'modify_time': self.__modify_time})
@@ -484,6 +489,7 @@ class ChatRoom(deque):
                 self.__mongo_collection.replace_one({'room_name':self.__room_name,
                                                     'owner_alias': self.__owner_alias,
                                                     'room_type': self.__room_type,
+                                                    'deleted': self.deleted,
                                                     'member_list': self.__member_list,
                                                     'create_time': self.__create_time,
                                                     'modify_time': self.__modify_time},
@@ -503,14 +509,9 @@ class ChatRoom(deque):
 class RoomList():
     """ This is the RoomList class instance that will handle a list of ChatRooms and obtaining them.
         NOTE: no need to have properties as this will be the main handler of all other class instances.
-        TODO: complete this class by writing its functions.
-        TODO: check out the data model to see what names should be
     """
     def __init__(self, room_list_name: str = DEFAULT_ROOM_LIST_NAME) -> None:
         """ Try to restore from mongo and establish variables for the room list
-            TODO: RoomList takes a name, set the name
-            TODO: inherit a list, or create an internal variable for a list of rooms
-            TODO: restore the mongoDB collection
             NOTE: restore will handle putting the rooms into the room_list
         """
         logging.info(f'Creating RoomList Instance: {room_list_name}')
@@ -519,7 +520,7 @@ class RoomList():
         self.__user_list = UserList()
         # Set up mongo - client, db, collection
         self.__mongo_client = MongoClient(host = MONGO_DB_HOST, port = MONGO_DB_PORT, username = MONGO_DB_USER, password = MONGO_DB_PASS, authSource = MONGO_DB_AUTH_SOURCE, authMechanism = MONGO_DB_AUTH_MECHANISM)
-        self.__mongo_db = self.__mongo_client.MONGO_DB
+        self.__mongo_db = self.__mongo_client.MONGO_DB_TEST
         self.__mongo_collection = self.__mongo_db.get_collection(room_list_name)
         if self.__mongo_collection is None:
             self.__mongo_collection = self.__mongo_db.create_collection(room_list_name)
@@ -533,7 +534,6 @@ class RoomList():
         ''' This method will create a new ChatRoom given that the room_name is not already taken for the collection.
             NOTE: This can just be a checker for the chatroom name existing in the list when restored or if it's in the collection
             NOTE: Maybe check with the collection as it is possible for all names to not be in the list and removed, due to the option for removal
-            TODO: it may not be needed to recreated an already existing Chatroom (through restore() method).
         '''
         logging.info(f'Attempting to create a ChatRoom instance with name {room_name}.')
         if self.__mongo_db.get_collection(room_name) is None:
@@ -556,10 +556,11 @@ class RoomList():
     def remove(self, room_name: str):
         ''' This method will remove a ChatRoom instance from the list of ChatRooms.
             NOTE: we want to make sure that the ChatRoom instance with the given room_name exists.
+            NOTE: accessing the property may not work
         '''
         chat_room_to_remove = self.__find_pos(room_name)
         if chat_room_to_remove is not CHAT_ROOM_INDEX_NOT_FOUND:
-            self.__room_list.pop(chat_room_to_remove)
+            self.__room_list[chat_room_to_remove].deleted = True
             logging.debug(f'ChatRoom {room_name} was removed from the room list.')
             self.__persist()
         else:
@@ -588,21 +589,27 @@ class RoomList():
             }
 
     def get_rooms(self):
-        ''' This method will return the rooms in the room list.
+        ''' This method will return the rooms in the room list, it now will check every room 
+            if it has been removed from the room list
             NOTE: The room list can be empty
-            NOTE: this may just be the room names or not
+            
         '''
         logging.info('Returned the list of rooms.')
-        return self.__room_list
+        visible_room_list = []
+        for room in self.__room_list:
+            if room.deleted is not REMOVED_ROOM:
+                visible_room_list.append(room)
+        return visible_room_list
 
     def get(self, room_name: str) -> ChatRoom:
         ''' This method will return a ChatRoom instance, given the name of the room, room_name.
+            The method now checks if the room instance has been removed or not
             NOTE: It is possible for a ChatRoom instance to not be in the list of rooms.
             NOTE: do we create a new ChatRoom if the chatroom was not found?
         '''
         logging.info(f'Attemping to get a chat room with name {room_name}.')
         for chat_room in self.__room_list:
-            if chat_room.room_name == room_name:
+            if chat_room.room_name == room_name and chat_room.deleted is not REMOVED_ROOM:
                 logging.debug(f'{room_name} was found in the chat room list.')
                 return chat_room
         logging.debug(f'{room_name} was not found in the chat room list.')
@@ -622,7 +629,7 @@ class RoomList():
     
     def find_by_member(self, member_alias: str) -> list:
         ''' This method will return a list of ChatRoom instances that has the the current alias within the list of
-                member_aliases in the ChatRoom instance.
+                member_aliases in the ChatRoom instance. The method now checks if the room instance has been removed from the list.
             NOTE: it is possible for all rooms to not have a the member_alias within their instance. return a empty list
             NOTE: create a new list and append the ChatRooms to the list.
             TODO: using the member_alias, find all rooms with a members_list that has this alias
@@ -634,15 +641,14 @@ class RoomList():
             return []
         found_member_chat_rooms = list()
         for current_chat_room in self.__room_list:
-            if member_alias in current_chat_room.member_list:
+            if member_alias in current_chat_room.member_list and current_chat_room.deleted is not REMOVED_ROOM:
                 found_member_chat_rooms.append(current_chat_room)
         logging.info(f'Returning a list of chat rooms with the member alias of {member_alias}.')
         return found_member_chat_rooms
 
     def find_by_owner(self, owner_alias: str) -> list:
         ''' This method will return a list of ChatRoom instances that have an owner_alias that the user is searching for.
-            NOTE: it is possible for all rooms to not have the current owner_alias.
-            NOTE: create a new list and append ChatRooms that have the same alias.
+            NOTE: it is possible for all rooms to not have the current owner_alias, resulting in the list being empty.
         '''
         logging.info(f'Attempting to find chat rooms for owner {owner_alias} in {self.__room_list_name}.')
         if owner_alias not in self.__user_alias_list.user_aliases:
@@ -650,7 +656,7 @@ class RoomList():
             return []
         found_owner_chat_rooms = list()
         for current_chat_room in self.__room_list:
-            if owner_alias is current_chat_room.owner_alias:
+            if owner_alias is current_chat_room.owner_alias and current_chat_room.deleted is not REMOVED_ROOM:
                 found_owner_chat_rooms.append(current_chat_room)
         logging.info(f'Returning a list of chat rooms with the owner alias of {owner_alias}.')
         return found_owner_chat_rooms
@@ -685,7 +691,7 @@ class RoomList():
         logging.info('Beginning the restore process.')
         room_metadata = self.__mongo_collection.find_one({ 'list_name' : self.__room_list_name })
         if room_metadata is None:
-            logging.debug(f'Room name {self.__room_list_name} was not found in the collections.')
+            logging.warning(f'Room name {self.__room_list_name} was not found in the collections.')
             return False
         self.__room_list_name = room_metadata['list_name']
         self.__room_list_create = room_metadata['create_time']
