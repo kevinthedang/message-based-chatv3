@@ -47,7 +47,7 @@ async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_AL
         NOTE: this user must be a valid member of the room to access the messages to the room.
     """
     logging.info(f'Attempting to get messages from {room_name} room...')
-    if room_name not in room_list.get(room_name = room_name):
+    if room_list.get(room_name = room_name) is None:
         logging.debug(f'Room {room_name} was not found in the list of rooms.')
         return JSONResponse(content = { 'message': f'Room {room_name} was not found in the list of rooms.'}, status_code = 400)
     room_requested = room_list.get(room_name = room_name)
@@ -57,13 +57,13 @@ async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_AL
     try:
         messages_in_room = room_requested.get_messages(user_alias = alias, num_messages = messages_to_get)
         if messages_in_room[2] is EMPTY:
-            logging.debug(f'No messages found in room {room_name}.')
+            logging.debug(f'Could not get messages in room {room_name}.')
             return JSONResponse(content = { 'message': 
                                         { 'data': {
                                             'message_texts': messages_in_room[0],
                                             'message_objects': messages_in_room[1],
                                             'num_messages': messages_in_room[2]
-                                        }}})
+                                        }}}, status_code = 200)
         else:
             logging.debug(f'{messages_in_room[2]} messages were found in {room_name} for user {alias}.')
             return JSONResponse(content = { 'message': 
@@ -75,6 +75,14 @@ async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_AL
     except:
         logging.error(f'Unknown Error obtaining the messages in room {room_name} for user {alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error obtaining the messages in room {room_name} for user {alias}.' }, status_code = 400)
+
+@app.get("/get_rooms/", status_code = 200)
+async def get_rooms():
+    """ API for getting messages from a room
+        NOTE: this user must be a valid member of the room to access the messages to the room.
+    """
+    list_of_rooms = room_list.get_rooms()
+    return JSONResponse(content = { 'message': 'room list found', 'room_list': list_of_rooms}, status_code = 200)
 
 @app.get("/users/", status_code = 200)
 async def get_users():

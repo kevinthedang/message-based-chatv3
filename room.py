@@ -129,7 +129,7 @@ class ChatRoom(deque):
         self.__user_list = UserList()
         # Set up mongo - client, db, collection, sequence_collection
         self.__mongo_client = MongoClient(host = MONGO_DB_HOST, port = MONGO_DB_PORT, username = MONGO_DB_USER, password = MONGO_DB_PASS, authSource = MONGO_DB_AUTH_SOURCE, authMechanism = MONGO_DB_AUTH_MECHANISM)
-        self.__mongo_db = self.__mongo_client.detest
+        self.__mongo_db = self.__mongo_client.get_database(MONGO_DB)
         self.__mongo_collection = self.__mongo_db.get_collection(self.__room_name) 
         self.__mongo_seq_collection = self.__mongo_db.get_collection("sequence")
         if self.__mongo_collection is None:
@@ -148,7 +148,7 @@ class ChatRoom(deque):
             self.__deleted = False
             for current_member in member_list:
                 if self.__user_list.get(current_member) is not None:
-                    self.__member_list.append(current_member)
+                    self.__member_list[current_member] = -1
                 else:
                     '''put a log here to log an error for the member existence'''
 
@@ -438,7 +438,7 @@ class ChatRoom(deque):
                     need to restore
         '''
         logging.info('Beginning the restore process.')
-        room_metadata = self.__mongo_collection.find_one({ 'room_name' : self.__room_name })
+        room_metadata = self.__mongo_collection.find_one(filter = { 'room_name' : self.room_name })
         if room_metadata is None:
             logging.debug(f'Room name {self.__room_name} was not found in the collections.')
             return False
@@ -458,7 +458,7 @@ class ChatRoom(deque):
                                                     to_user = current_message['mess_props']['to_user'],
                                                     from_user = current_message['mess_props']['from_user'],
                                                     mess_type = current_message['mess_props']['mess_type'],
-                                                    sequence_num = current_message['mess_props']['sequence_num'],
+                                                    sequence_num = current_message['mess_props']['sequence_num'], # REMOVE THIS AND FIX THE to_dict() to put seq num outside in mess props
                                                     sent_time = current_message['mess_props']['sent_time'],
                                                     rec_time = current_message['mess_props']['rec_time'])
             new_message = ChatMessage(message = current_message['message'], mess_id = current_message['_id'], mess_props = message_properties)
@@ -595,10 +595,10 @@ class RoomList():
             
         '''
         logging.info('Returned the list of rooms.')
-        visible_room_list = []
+        visible_room_list = {}
         for room in self.__room_list:
             if room.deleted is not REMOVED_ROOM:
-                visible_room_list.append(room)
+                visible_room_list[f'{room.room_name}'] = f'{room.room_type}'
         return visible_room_list
 
     def get(self, room_name: str) -> ChatRoom:
@@ -704,6 +704,6 @@ class RoomList():
                                     owner_alias = current_room_metadata['owner_alias'],
                                     room_type = current_room_metadata['room_type'])
             self.__room_list.append(new_chatroom)
-            logging.debug('Room', current_room_metadata['room_name'], 'has been added to the room list.')
+            logging.debug('Room ' + current_room_metadata['room_name'] + ' has been added to the room list.')
         logging.info(f'All rooms in {self.__room_list_name} placed into the room list.')
         return True
