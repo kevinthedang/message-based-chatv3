@@ -350,6 +350,15 @@ class ChatRoom(deque):
         logging.debug(f'Returning {num_messages} message objects from the deque.')
         return message_objects, len(message_objects)
 
+    def __check_messages(self, message_object_list: list, user_alias: str) -> list:
+        ''' This method will be a helper method that will get rid of any messages that are 
+            removed or were blacklisted from the user
+            TODO: implement removed cleaning
+            TODO: implement blacklist cleaning
+        '''
+        cleaned_message_list = list()
+        return cleaned_message_list
+
     def send_message(self, message: str, from_alias: str, mess_props: MessageProperties = None) -> bool:
         ''' This method will send a message to the ChatRoom instance
             NOTE: we are assuming that message is not None or empty
