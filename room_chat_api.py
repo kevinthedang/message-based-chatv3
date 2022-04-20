@@ -55,7 +55,7 @@ async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_AL
         logging.warning(f'User {alias} does not exist or they are not a member of the room.')
         return JSONResponse(content = { 'message': f'User {alias} does not exist or they are not a member of the room.'}, status_code = 400)
     try:
-        messages_in_room = room_requested.get_messages(user_alias = alias, num_messages = messages_to_get)
+        messages_in_room = room_requested.get_messages(user_alias = alias, num_messages = messages_to_get) # error is here
         if messages_in_room[2] is EMPTY:
             logging.debug(f'Could not get messages in room {room_name}.')
             return JSONResponse(content = { 'message': 
@@ -66,8 +66,7 @@ async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_AL
                                         }}}, status_code = 200)
         else:
             logging.debug(f'{messages_in_room[2]} messages were found in {room_name} for user {alias}.')
-            return JSONResponse(content = { 'message': 
-                                        { 'data': {
+            return JSONResponse(content = { 'message': { 'data': {
                                             'message_texts': messages_in_room[0],
                                             'message_objects': messages_in_room[1],
                                             'num_messages': messages_in_room[2]
@@ -96,7 +95,8 @@ async def get_users():
             return JSONResponse(content = 'No users were found in the user list.', status_code = 400)
         else:
             logging.debug('A list of users was given to the client user')
-            return JSONResponse(content = { 'message': { 'list_of_users': users.get_all_users_aliases() }}, status_code = 200)
+            return JSONResponse(content = { 'message': 'list of users', 
+                                            'list_of_users': users.get_all_users_aliases()}, status_code = 200)
     except:
         logging.error('Unknown Error obtaining all the users in the user list.')
         return JSONResponse(content = { 'message': 'Unknown Error obtaining all the users in the user list.' }, status_code = 400)
@@ -108,7 +108,7 @@ async def register_client(client_alias: str):
     """
     logging.info(f'Attempting to register {client_alias} as a user...')
     try:
-        if users.append(users.register(new_alias = client_alias)) is True:
+        if users.register(new_alias = client_alias) is not None:
             logging.debug(f'User {client_alias} was successfully registered as a new user to the user list.')
             return JSONResponse(content = { 'message': f'{client_alias} was successfully added to the list of users.' }, status_code = 201)
         else:
@@ -128,8 +128,8 @@ async def create_room(room_name: str, owner_alias: str, room_type: int = ROOM_TY
         logging.debug(f'{owner_alias} was not a valid user alias in the UserList.')
         return JSONResponse(content = { 'message': 'Users not found in UserList.' }, status_code = 412)
     try:
-        new_chat_room = room_list.create(room_name = room_name, owner_alias = owner_alias, room_type = room_type)
-        if new_chat_room is None and room_list.add(new_room = new_chat_room) is None:
+        new_chat_room = room_list.add(room_list.create(room_name = room_name, owner_alias = owner_alias, room_type = room_type))
+        if new_chat_room is False:
             logging.debug(f'"{room_name}" room already exists in the list of rooms.')
             return JSONResponse(content = { 'message': f'"{room_name}" room already exists in the list of rooms.' }, status_code = 409)
         else:

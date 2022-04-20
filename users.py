@@ -104,16 +104,15 @@ class ChatUser():
         return {
                 'alias': self.__alias,
                 'blacklist': self.blacklist,
+                'removed': self.__removed,
                 'create_time': self.__create_time,
-                'modify_time': self.__modify_time,
-                'removed': self.__removed
+                'modify_time': self.__modify_time
         }
         
 class UserList():
     """ List of users, inheriting list class
     """
     def __init__(self, list_name: str = DEFAULT_USER_LIST_NAME) -> None:
-        self.__list_name = list_name
         self.__user_list = list()
         self.__mongo_client = MongoClient(f'mongodb://{MONGO_DB_HOST}:{MONGO_DB_PORT}/')
         self.__mongo_db = self.__mongo_client.get_database(MONGO_DB)
@@ -122,6 +121,7 @@ class UserList():
             logging.debug('UserList Document was found in the collection.')
             self.__dirty = False
         else:
+            self.__list_name = list_name
             self.__id = None
             self.__create_time = datetime.now()
             self.__modify_time = datetime.now()
@@ -177,9 +177,9 @@ class UserList():
             This only creates the user, it does not add them to the list of users yet.
             NOTE: we check if the user already exists, if so, don't make another user with that alias
         """
-        if (current_user := self.get(new_alias)) is not None:
+        if self.get(new_alias) is not None:
             logging.warning(f'{new_alias} is already registered.')
-            return current_user
+            return None
         if len(new_alias) > 2:
             logging.debug(f'Registered new user with name {new_alias}.')
             user = ChatUser(alias = new_alias)
