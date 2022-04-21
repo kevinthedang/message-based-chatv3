@@ -357,6 +357,10 @@ class ChatRoom(deque):
             TODO: implement blacklist cleaning
         '''
         cleaned_message_list = list()
+        for message_object in message_object_list:
+            if message_object.message_properties.from_alias not in self.__user_list.get(user_alias).blacklist:
+                if message_object.removed is not True:
+                    cleaned_message_list.append(message_object)
         return cleaned_message_list
 
     def send_message(self, message: str, from_alias: str, mess_props: MessageProperties = None) -> bool:
