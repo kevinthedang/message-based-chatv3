@@ -1,6 +1,5 @@
 import logging
-
-from numpy import int16
+from re import M
 from users import *
 from constants import *
 from datetime import date, datetime
@@ -273,6 +272,7 @@ class ChatRoom(deque):
         '''
         logging.info(f'Calling the put() method with current message being {message} appending to the left of the deque.')
         if message is not None:
+            '''Use this super().insert(POSITION_TO_INSERT, NUMBER_TO_INSERT)'''
             super().appendleft(message)
             logging.info(f'{message} was appended to the left of the queue.')
 
@@ -312,29 +312,28 @@ class ChatRoom(deque):
         if user_alias not in self.__member_list and self.__room_type is ROOM_TYPE_PRIVATE:
             logging.warning(f'User with alias {user_alias} is not a member of {self.__room_name}.')
             return [], [], 0
-        current_user = self.__user_list.get(user_alias)
-        '''IMPLEMENT GETTING MESSAGES WITH REGARD TO A BLACKLIST (AND IN MESSAGE OBJECTS) *******************
-        OR this is handled in the API (mst)
-        '''
-
+        message_objects = self.__get_message_objects(num_messages = num_messages)
+        cleaned_message_list = self.__clean_messages(message_object_list = message_objects, user_alias = user_alias)
         if return_objects is True:
             logging.debug('Returning messages with the message objects.')
-            message_objects = self.__get_message_objects(num_messages = num_messages)
             if num_messages == GET_ALL_MESSAGES:
-                return [current_message.message for current_message in list(self)], [{'message_object': message_obj.to_dict()} for message_obj in message_objects[0]], message_objects[1]
+                return [current_message.message for current_message in cleaned_message_list], [{'message_object': message_obj.to_dict()} for message_obj in cleaned_message_list], len(cleaned_message_list)
             else:
                 message_texts = list()
+                message_object_list = list()
                 for current_message_index in range(RIGHT_SIDE_OF_DEQUE, RIGHT_SIDE_OF_DEQUE - num_messages, RANGE_STEP):
-                    message_texts.append(super()[current_message_index].message)
-                return message_texts, message_objects[0], message_objects[1]
+                    message_texts.append(cleaned_message_list[current_message_index].message)
+                    message_objects.append(cleaned_message_list[current_message_index])
+
+                return message_texts, message_object_list, len(message_object_list)
         else:
             logging.debug('Returning messages without the message objects.')
             if num_messages == GET_ALL_MESSAGES:
-                return [current_message.message for current_message in list(self)], len(self)
+                return [current_message.message for current_message in cleaned_message_list], len(cleaned_message_list)
             else:
                 message_texts = list()
                 for current_message_index in range(RIGHT_SIDE_OF_DEQUE, RIGHT_SIDE_OF_DEQUE - num_messages, RANGE_STEP):
-                    message_texts.append(super()[current_message_index].message)
+                    message_texts.append(cleaned_message_list[current_message_index].message)
                 return message_texts, len(message_texts)
 
     def __get_message_objects(self, num_messages: int = GET_ALL_MESSAGES):
@@ -350,25 +349,23 @@ class ChatRoom(deque):
         logging.debug(f'Returning {num_messages} message objects from the deque.')
         return message_objects, len(message_objects)
 
-    def __check_messages(self, message_object_list: list, user_alias: str) -> list:
+    def __clean_messages(self, message_object_list: list, user_alias: str = None) -> list:
         ''' This method will be a helper method that will get rid of any messages that are 
-            removed or were blacklisted from the user
-            TODO: implement removed cleaning
-            TODO: implement blacklist cleaning
+            removed or were blacklisted from the user. The helper method checks if they are blacklisted first
+            and then checks if the message was removed.
         '''
+        
         cleaned_message_list = list()
-        for message_object in message_object_list:
-            if message_object.message_properties.from_alias not in self.__user_list.get(user_alias).blacklist:
-                if message_object.removed is not True:
-                    cleaned_message_list.append(message_object)
+        for message_object in message_object_list[0]:
+            if user_alias is None or message_object.message_properties.to_alias is user_alias:
+                if message_object.message_properties.from_alias not in self.__user_list.get(user_alias).blacklist:
+                    if message_object.removed is not True:
+                        cleaned_message_list.append(message_object)
         return cleaned_message_list
 
     def send_message(self, message: str, from_alias: str, mess_props: MessageProperties = None) -> bool:
         ''' This method will send a message to the ChatRoom instance
-            NOTE: we are assuming that message is not None or empty
-            NOTE: we most likely will need to utilize the put function to put the message on the queue
-            NOTE: we also need to create an instance of ChatMessage to put on the queue
-            NOTE: should we persist after putting the message on the deque.
+            TODO: implement a bubble insert helper method in put?
         '''
         logging.info(f'Attempting to send {message} with the alias {from_alias}.')
         if from_alias in self.__member_list or self.__room_type is ROOM_TYPE_PUBLIC:
@@ -386,6 +383,32 @@ class ChatRoom(deque):
             logging.debug(f'Alias {from_alias} is not a member of the private chat room {self.__room_name}.')
             return False
 
+    def remove_message(self, target_alias: str) -> bool:
+        ''' This method will remove all messages based on the target_alias
+        '''
+        if target_alias not in self.__member_list:
+            logging.warning(f'"{target_alias}" is not a member of room instance "{self.__room_name}"')
+            return False
+        for message_object_index in range(len(list(self))):
+            if super()[message_object_index].message_properties.from_user == target_alias:
+                super()[message_object_index].removed = True
+                logging.debug(f'Removed message "{super()[message_object_index].message}" was removed from room instance "{self.__room_name}"')
+        logging.info(f'All messages from "{target_alias}" removed from the room instance "{self.__room_name}"')
+        return True
+
+    def restore_message(self, target_alias: str) -> bool:
+        ''' This method will restore all messages based on the target alias in a member list
+        '''
+        if target_alias not in self.__member_list:
+            logging.warning(f'"{target_alias}" is not a member of room instance "{self.__room_name}"')
+            return False
+        for message_object_index in range(len(list(self))):
+            if super()[message_object_index].message_properties.from_user == target_alias:
+                super()[message_object_index].removed = False
+                logging.debug(f'Restored message "{super()[message_object_index].message}" for room instance "{self.__room_name}"')
+        logging.info(f'All messages from "{target_alias}" restored for the room instance "{self.__room_name}"')
+        return True
+
     def find_member(self, member_alias) -> str:
         ''' This method will find the member within the current ChatRoom instance
             NOTE: if the member is not found, return none
@@ -394,7 +417,7 @@ class ChatRoom(deque):
         for current_member in self.__member_list:
             if current_member == member_alias:
                 return current_member
-        # member was not found in the list of members (log this)
+        logging.warning(f'"{member_alias}" is not in the memberlist for room instance "{self.__room_name}"')
         return None
 
     def add_member(self, member_alias: str) -> int:
@@ -403,10 +426,13 @@ class ChatRoom(deque):
             TODO: log for each case below
         '''
         if self.__user_list.get(member_alias) is None:
+            logging.warning(f'"{member_alias}" is not a registered user')
             return INVALID_USER
         if self.find_member(member_alias) is not None:
+            logging.debug(f'"{member_alias}" is already a member of room instance "{self.__room_name}"')
             return MEMBER_FOUND
         self.__member_list.append(member_alias)
+        logging.debug(f'"{member_alias}" was added to the member list of "{self.__room_name}"')
         return MEMBER_ADDED
 
     def remove_member(self, member_alias):
@@ -416,8 +442,9 @@ class ChatRoom(deque):
         '''
         if member_alias in self.__member_list:
             self.__member_list.remove(member_alias)
+            logging.debug(f'"{member_alias}" was removed from the member list of room instance "{self.__room_name}"')
         else:
-            logging.warning(f'"{member_alias}" was not found in the member list')
+            logging.warning(f'"{member_alias}" was not found in the member list in room instance "{self.__room_name}"')
 
     def find_message_by_sequence_num(self, sequence_num: int) -> ChatMessage:
         ''' This method will use binary search to find the message by the sequence number.
@@ -437,7 +464,7 @@ class ChatRoom(deque):
                 return self[current_middle]
         return None
 
-    def find_message_by_alias(self, alias: str) -> list:
+    def find_messages_by_alias(self, alias: str) -> list:
         ''' This method will return a list of messages from the deque if the message was sent
             by the alias provided.
             NOTE: the list can be empty
@@ -450,7 +477,7 @@ class ChatRoom(deque):
                 message_list.append(current_chat_message)
         return message_list
 
-    def find_message_by_keyword(self, keyword: str) -> list:
+    def find_messages_by_keyword(self, keyword: str) -> list:
         ''' This method will return a list of messages from the deque if the message contains
             the keyword provided by the user.
             NOTE: how can we handle this if the keyword is None/empty?
@@ -466,6 +493,7 @@ class ChatRoom(deque):
         ''' This method will restore the metadata and the messages that a certain ChatRoom instance needs
             NOTE: a ChatRoom will contain it's own collection, if we are creating a new collection, we don't
                     need to restore
+            TODO: implement a bubble insert
         '''
         logging.info('Beginning the restore process.')
         room_metadata = self.__mongo_collection.find_one(filter = { 'room_name' : self.room_name })
