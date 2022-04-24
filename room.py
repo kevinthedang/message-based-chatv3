@@ -175,7 +175,7 @@ class ChatRoom(deque):
                 if self.__user_list.get(current_member) is not None:
                     self.__member_list[current_member] = -1
                 else:
-                    '''put a log here to log an error for the member existence'''
+                    logging.warning(f'{current_member} is not a valid user.')
 
     def __str__(self):
         return f'Chat room with name {self.__room_name}.'
@@ -395,7 +395,7 @@ class ChatRoom(deque):
             logging.debug(f'Alias {from_alias} is not a member of the private chat room {self.__room_name}.')
             return False
 
-    def remove_message(self, target_alias: str) -> bool:
+    def remove_messages(self, target_alias: str) -> bool:
         ''' This method will remove all messages based on the target_alias
         '''
         if target_alias not in self.__member_list:
@@ -409,7 +409,7 @@ class ChatRoom(deque):
         self.persist()
         return True
 
-    def restore_message(self, target_alias: str) -> bool:
+    def restore_messages(self, target_alias: str) -> bool:
         ''' This method will restore all messages based on the target alias in a member list
         '''
         if target_alias not in self.__member_list:

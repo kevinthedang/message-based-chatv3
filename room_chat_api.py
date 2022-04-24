@@ -78,25 +78,27 @@ def authenticate_user(username: str, password: str):
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     ''' This method is a login auth to get the access token for the user
     '''
-    http_exception = HTTPException(
-            status_code = status.HTTP_401_UNAUTHORIZED,
-            detail = 'Incorrect username or password',
-        )
+    http_exception = HTTPException(status_code = status.HTTP_401_UNAUTHORIZED, detail = 'Incorrect username or password', headers={"WWW-Authenticate": "Bearer"})
     user = authenticate_user(form_data.username, form_data.password)
     if not user:
+        logging.debug(f'{form_data.username} and {form_data.password} are do not belong to any user')
         raise http_exception
     login_user = users.get(target_alias = form_data.username)
     hashed_user_password = get_password_hash(password = form_data.password)
     if login_user.hash_pass is not hashed_user_password:
+        logging.debug(f'{form_data.username} and {form_data.password} are incorrect')
         raise http_exception
     return {"access_token": login_user.alias, "token_type": "bearer"}
 
 @app.post("/token2")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    ''' This method 
+    ''' This method will just return the user current user alias that is logged in
     '''
     user = users.get(form_data.username)
-    return {"access_token": user.alias, "token_type": "bearer"}
+    if user:
+        return JSONResponse(status_code = 401, content = {"access_token": user.alias, "token_type": "bearer"})
+    else:
+        return JSONResponse(status_code = 401, content = {"access_token": "INVALID USER", "token_type": "bearer"})
 
 ''' room/user implementation
 '''
@@ -141,7 +143,7 @@ async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_AL
         logging.error(f'Unknown Error obtaining the messages in room {room_name} for user {alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error obtaining the messages in room {room_name} for user {alias}.' }, status_code = 400)
 
-@app.get("/get_rooms/", status_code = 200)
+@app.get("/rooms/", status_code = 200)
 async def get_rooms():
     """ API for getting messages from a room
         NOTE: this user must be a valid member of the room to access the messages to the room.
@@ -255,7 +257,7 @@ async def remove_member(room_name: str, member_name: str):
         logging.debug(f'{member_name} was successflly added as a member to room instance {room_name}')
         return Response(status_code = 201, content = {'message': f'{member_name} was successflly added as a member to room instance {room_name}'})
 
-@app.post("/message/", status_code = 201)
+@app.post("/room/message/", status_code = 201)
 async def send_message(room_name: str, message: str, from_alias: str, to_alias: str):
     """ API for sending a message, for a particular room
         TODO: this may want to access the send_message feature from a chatroom
@@ -287,13 +289,48 @@ async def send_message(room_name: str, message: str, from_alias: str, to_alias: 
         logging.error(f'Unknown Error when sending {message} to {to_alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error sending {message} to {to_alias}.'}, status_code = 400)
 
-
-# do I need this code below? auth will handle the username and password
-def main():
-    ''' Main method to get the current user alias
+@app.post('/room/remove_message', status_code = 201)
+async def remove_messages(room_name: str, client_alias: str):
+    ''' This method will remove a message from the list of messages for a certain user
+        NOTE: this method will just set the removed bool to True
     '''
-    MY_IPADDRESS = socket.gethostbyname(socket.gethostname())
-    MY_NAME = input("Please enter your name: ")
+    if client_alias not in users.get_all_users_aliases:
+        return JSONResponse(content = {'message': f'{client_alias} is not a valid registered user.'}, status_code = 510)
+    room_instance = room_list.get(room_name = room_name)
+    if room_instance is None:
+        return JSONResponse(content = {'message': f'{room_name} is not a valid registered room.'}, status_code = 510)
+    removed_messages_success = room_instance.remove_messages(target_alias = client_alias)
+    if removed_messages_success is False:
+        return JSONResponse(content = {'message': f'{client_alias} is not a member of the room.'}, status_code = 510)
+    else:
+        return JSONResponse(content = {'message': f'All of {client_alias} messages have been removed.'}, status_code = 201)
 
-if __name__ == "__main__":
-    main()
+@app.post('/room/restore_message', status_code = 201)
+async def restore_message(room_name: str, client_alias: str):
+    ''' This method will restore a message from the list of messages for a certain user
+    '''
+    if client_alias not in users.get_all_users_aliases:
+        return JSONResponse(content = {'message': f'{client_alias} is not a valid registered user.'}, status_code = 510)
+    room_instance = room_list.get(room_name = room_name)
+    if room_instance is None:
+        return JSONResponse(content = {'message': f'{room_name} is not a valid registered room.'}, status_code = 510)
+    restored_messages_success = room_instance.restore_messages(target_alias = client_alias)
+    if restored_messages_success is False:
+        return JSONResponse(content = {'message': f'{client_alias} is not a member of the room.'}, status_code = 510)
+    else:
+        return JSONResponse(content = {'message': f'All of {client_alias} messages have been removed.'}, status_code = 201)
+
+@app.post('/room/edit_message', status_code = 201)
+async def edit_message(room_name: str, client_alias: str, message_to_edit: str, new_message: str):
+    ''' This method will edit an existing message in a ChatRoom
+    '''
+    if client_alias not in users.get_all_users_aliases:
+        return JSONResponse(content = {'message': f'{client_alias} is not a valid registered user.'}, status_code = 510)
+    room_instance = room_list.get(room_name = room_name)
+    if room_instance is None:
+        return JSONResponse(content = {'message': f'{room_name} is not a valid registered room.'}, status_code = 510)
+    restored_messages_success = room_instance.edit_message(user_alias = client_alias, previous_message = message_to_edit, new_message = new_message)
+    if restored_messages_success is False:
+        return JSONResponse(content = {'message': f'Error editing a message in edit_message() call, Refer to logs.'}, status_code = 510)
+    else:
+        return JSONResponse(content = {'message': f'{message_to_edit} has been updated to {new_message} as a new message.'}, status_code = 201)
