@@ -275,7 +275,7 @@ class ChatRoom(deque):
     #Overriding the queue type put and get operations to add type hints for the ChatMessage type
     def put(self, message: ChatMessage = None) -> None:
         ''' This method will put the current message to the left side of the deque
-            TODO: put the message on the left using appendLeft() method
+            NOTE: we use the insert method to put the ChatMessage in the correct placement in the deque
         '''
         logging.info(f'Calling the put() method with current message being {message} appending to the left of the deque.')
         if message is not None:
@@ -309,17 +309,20 @@ class ChatRoom(deque):
                 return current_message
         logging.debug(f'{message_text} was not found in the deque.')
         return None
-            
+    
+    @STATS_CLIENT.timer('get_messages')
     def get_messages(self, user_alias: str, make_clean: bool, return_objects: bool, num_messages: int = GET_ALL_MESSAGES):
         ''' This method will get num_messages from the deque and get their text, objects and a total count of the messages
             NOTE: total # of messages seems to just be num messages, but if getting all then just return the length of the list
             NOTE: indecies 0 and 1 is to access the values in the tuple for the objects and the number of objects
+            NOTE: case of message_objects[1] gets the length of the cleaned list of messages
         '''
         # return message texts, full message objects, and total # of messages
         if user_alias not in self.__member_list and self.__room_type is ROOM_TYPE_PRIVATE:
             logging.warning(f'User with alias {user_alias} is not a member of {self.__room_name}.')
             return [], [], 0
         message_objects = self.__get_message_objects(num_messages = num_messages)
+        STATS_CLIENT.gauge('num_messages', message_objects[1])
         cleaned_message_list = self.__clean_messages(message_object_list = message_objects, user_alias = user_alias, make_clean = make_clean)
         if return_objects is True:
             logging.debug('Returning messages with the message objects.')
@@ -331,7 +334,6 @@ class ChatRoom(deque):
                 for current_message_index in range(RIGHT_SIDE_OF_DEQUE, RIGHT_SIDE_OF_DEQUE - num_messages, RANGE_STEP):
                     message_texts.append(cleaned_message_list[current_message_index].message)
                     message_objects.append(cleaned_message_list[current_message_index])
-
                 return message_texts, message_object_list, len(message_object_list)
         else:
             logging.debug('Returning messages without the message objects.')
@@ -375,7 +377,7 @@ class ChatRoom(deque):
     @STATS_CLIENT.timer('send_message')
     def send_message(self, message: str, from_alias: str, mess_props: MessageProperties = None) -> bool:
         ''' This method will send a message to the ChatRoom instance
-            TODO: implement a bubble insert helper method in put?
+            List is sorted through the put() methods
         '''
         logging.info(f'Attempting to send {message} with the alias {from_alias}.')
         if from_alias in self.__member_list or self.__room_type is ROOM_TYPE_PUBLIC:
