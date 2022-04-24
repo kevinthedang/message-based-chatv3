@@ -1,12 +1,17 @@
 import socket
 import logging
 import json
-from fastapi import FastAPI, Request, status, Form
-from fastapi.responses import JSONResponse, ORJSONResponse, Response
+from fastapi import FastAPI, Request, status, Form, Depends, HTTPException, status
+from fastapi.responses import JSONResponse, Response
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
 from room import *
 from constants import *
 from users import *
+from pydantic import BaseModel
+from passlib.context import CryptContext
+from datetime import timedelta
+
 ''' Task List for this file:
 TODO: Implement a basic authentication: (username and password for this client), 
         possibly just in my constants or a secret file that only belongs to me. This should
@@ -20,9 +25,6 @@ TODO: for testing, we want to include metrics now, for example, getting the time
         Another thing can be the amount of messages that is returned from get_messages.
 '''
 
-# do I need this constant?
-MY_IPADDRESS = ""
-
 ''' Reasons for global variables:
         - The first is the documented way to deal with running the app in uvicorn
         - The second one handles the RoomList to access the rooms from MongoDB
@@ -32,13 +34,78 @@ logging.basicConfig(filename='message_chat.log', level=logging.INFO, format = LO
 app = FastAPI()
 room_list = RoomList()
 users = UserList()
+pwd_contexts = CryptContext(schemes = ['bcrypt'], deprecated = 'auto')    
 templates = Jinja2Templates(directory="")
 
+''' Structures to use for authentication
+'''
+class Token(BaseModel):
+    access_token: str
+    token_type: str # what does this mean?
+
+class LoginForm(BaseModel):
+    ''' This structure is to hold the alias and password inputs from the auth form
+    '''
+    alias: str
+    password: str
+
+''' Utility methods for auth
+'''
+def verify_password(plain_password, hashed_password):
+    ''' This method will verify that the hashed password will match the plain password
+        TODO: maybe hash the plain_pass then return?
+    '''
+    return pwd_contexts.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    ''' This method will return a hashed version of the plain password
+    '''
+    return pwd_contexts.hash(password)
+
+def authenticate_user(username: str, password: str):
+    ''' This metod will make sure that the user belongs to the system, if they are they are returned,
+        if not, False will be returned.
+    '''
+    user = users.get(target_alias = username)
+    if not user:
+        return False
+    if not verify_password(password, get_password_hash(password = password)):
+        return False
+    return user
+
+''' Auth methods
+'''
+@app.post('/token')
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    ''' This method is a login auth to get the access token for the user
+    '''
+    http_exception = HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail = 'Incorrect username or password',
+        )
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise http_exception
+    login_user = users.get(target_alias = form_data.username)
+    hashed_user_password = get_password_hash(password = form_data.password)
+    if login_user.hash_pass is not hashed_user_password:
+        raise http_exception
+    return {"access_token": login_user.alias, "token_type": "bearer"}
+
+@app.post("/token2")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    ''' This method 
+    '''
+    user = users.get(form_data.username)
+    return {"access_token": user.alias, "token_type": "bearer"}
+
+''' room/user implementation
+'''
 @app.get("/")
 async def index():
-    """ Default page
+    ''' Default page
         NOTE: when the user accesses the main page, they will get the following JSON response (dictionary)
-    """
+    '''
     return { 'message' : { 'from' : 'kevin', 'to' : 'you :)' }}
 
 @app.get("/messages/", status_code = 200)
@@ -101,10 +168,9 @@ async def get_users():
         logging.error('Unknown Error obtaining all the users in the user list.')
         return JSONResponse(content = { 'message': 'Unknown Error obtaining all the users in the user list.' }, status_code = 400)
 
-@app.post("/alias", status_code = 201)
+@app.post("/users/alias", status_code = 201)
 async def register_client(client_alias: str):
     """ API for adding a user alias
-        TODO: access the UserList var above and attempt to register and add the user to the UserList
     """
     logging.info(f'Attempting to register {client_alias} as a user...')
     try:
@@ -117,6 +183,23 @@ async def register_client(client_alias: str):
     except:
         logging.error(f'Unknown Error registering a user with the name {client_alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error registering a user with the name {client_alias}.' }, status_code = 400)
+
+@app.post("/users/remove_alias", status_code = 201)
+async def register_client(client_alias: str):
+    """ API for removing a user
+    """
+    logging.info(f'Attempting to deregister {client_alias} as a user...')
+    try:
+        if users.get(target_alias = client_alias) is not None:
+            logging.debug(f'User {client_alias} was successfully registered as a new user to the user list.')
+            users.deregister(alias_to_remove = client_alias)
+            return JSONResponse(content = { 'message': f'{client_alias} was successfully removed from the list of users.' }, status_code = 201)
+        else:
+            logging.debug(f'{client_alias} is not a valid user.')
+            return JSONResponse(content = { 'message': f'User {client_alias} is not a user.' }, status_code = 403)
+    except:
+        logging.error(f'Unknown Error deregistering a user with the name {client_alias}.')
+        return JSONResponse(content = { 'message': f'Unknown Error deregistering a user with the name {client_alias}.' }, status_code = 400)
 
 @app.post("/room", status_code = 201)
 async def create_room(room_name: str, owner_alias: str, room_type: int = ROOM_TYPE_PRIVATE):
@@ -137,6 +220,41 @@ async def create_room(room_name: str, owner_alias: str, room_type: int = ROOM_TY
     except:
         logging.error(f'Unknown Error creating a room with name {room_name} by {owner_alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error creating a room with name {room_name} by {owner_alias}.'}, status_code = 400)
+
+@app.post("/room/member", status_code=201)
+async def add_member(room_name: str, member_name: str):
+    if users.get(member_name) is None:
+        logging.debug(f'{member_name} is not a valid user.')
+        return JSONResponse(status_code = 433, content = {'message': f'{member_name} is not a valid user.'})
+    room_instance = room_list.get(room_name = room_name)
+    if room_instance is None:
+        logging.warning(f'{member_name} was attempting to access a room that does not exist, named {room_name}')
+        return JSONResponse(status_code = 404, content = {'message': f'Room instance {room_name} is not in the room list.'})
+    if (result := room_instance.add_member(member_alias = member_name)) is MEMBER_FOUND:
+        logging.debug(f'{member_name} is already a member in {room_name}')
+        return JSONResponse(status_code = 510, content = {'message': f'{member_name} is already a member of room instance {room_name}'})
+    elif result is UNABLE_TO_ADD_MEMBER:    
+        logging.debug(f'There was an unexpected API error adding {member_name} to room {room_name} as a member')
+        return JSONResponse(status_code = 510, content = {'message': f'There was an unexpected API error adding {member_name} to room {room_name} as a member'})
+    else:
+        logging.debug(f'{member_name} was successflly added as a member to room instance {room_name}')
+        return Response(status_code = 201, content = {'message': f'{member_name} was successflly added as a member to room instance {room_name}'})
+
+@app.post("/room/remove_member", status_code=201)
+async def remove_member(room_name: str, member_name: str):
+    if users.get(member_name) is None:
+        logging.debug(f'{member_name} is not a valid user.')
+        return JSONResponse(status_code = 433, content = {'message': f'{member_name} is not a valid user.'})
+    room_instance = room_list.get(room_name = room_name)
+    if room_instance is None:
+        logging.warning(f'{member_name} was attempting to access a room that does not exist, named {room_name}')
+        return JSONResponse(status_code = 510, content = {'message': f'Room instance {room_name} is not in the room list.'})
+    if room_instance.add_member(member_alias = member_name) is INVALID_USER:
+        logging.debug(f'{member_name} is not in the member list of room instance {room_name}')
+        return JSONResponse(status_code = 510, content = {'message': f'{member_name} is not in the member list of room instance {room_name}'})
+    else:
+        logging.debug(f'{member_name} was successflly added as a member to room instance {room_name}')
+        return Response(status_code = 201, content = {'message': f'{member_name} was successflly added as a member to room instance {room_name}'})
 
 @app.post("/message/", status_code = 201)
 async def send_message(room_name: str, message: str, from_alias: str, to_alias: str):

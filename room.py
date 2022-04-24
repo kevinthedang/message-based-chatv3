@@ -458,18 +458,22 @@ class ChatRoom(deque):
             members for a ChatRoom instance.
             TODO: log for each case below
         '''
-        if self.__user_list.get(member_alias) is None:
-            logging.warning(f'"{member_alias}" is not a registered user')
-            return INVALID_USER
-        if self.find_member(member_alias) is not None:
-            logging.debug(f'"{member_alias}" is already a member of room instance "{self.__room_name}"')
-            return MEMBER_FOUND
-        self.__member_list.append(member_alias)
-        logging.debug(f'"{member_alias}" was added to the member list of "{self.__room_name}"')
-        self.persist()
-        return MEMBER_ADDED
+        try:
+            if self.__user_list.get(member_alias) is None:
+                logging.warning(f'"{member_alias}" is not a registered user')
+                return INVALID_USER
+            if self.find_member(member_alias) is not None:
+                logging.debug(f'"{member_alias}" is already a member of room instance "{self.__room_name}"')
+                return MEMBER_FOUND
+            self.__member_list.append(member_alias)
+            logging.debug(f'"{member_alias}" was added to the member list of "{self.__room_name}"')
+            self.persist()
+            return MEMBER_ADDED
+        except:
+            logging.error(f'Unexpected error when adding {member_alias} as a member of room instance {self.room_name}')
+            return UNABLE_TO_ADD_MEMBER
 
-    def remove_member(self, member_alias):
+    def remove_member(self, member_alias) -> int:
         ''' This method will remove the member alias from the list of members for
             a ChatRoom instance
             TODO: log the situation below
@@ -478,8 +482,10 @@ class ChatRoom(deque):
             self.__member_list.remove(member_alias)
             self.persist()
             logging.debug(f'"{member_alias}" was removed from the member list of room instance "{self.__room_name}"')
+            return MEMBER_FOUND
         else:
             logging.warning(f'"{member_alias}" was not found in the member list in room instance "{self.__room_name}"')
+            return INVALID_USER
 
     def find_message_by_sequence_num(self, sequence_num: int) -> ChatMessage:
         ''' This method will use binary search to find the message by the sequence number.
