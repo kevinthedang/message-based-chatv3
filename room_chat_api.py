@@ -169,7 +169,43 @@ async def get_users():
         logging.error('Unknown Error obtaining all the users in the user list.')
         return JSONResponse(content = { 'message': 'Unknown Error obtaining all the users in the user list.' }, status_code = 400)
 
-@app.post("/users/alias", status_code = 201)
+@app.get("/users/blacklist_user/", status_code = 200)
+async def blacklist_user(client_alias: str, user_to_blacklist: str):
+    """ API blacklisting a user
+    """
+    logging.info('Attempting to get all of the users from the user list...')
+    try:
+        if client_alias not in users.get_all_users_aliases() and user_to_blacklist not in users.get_all_users_aliases():
+            logging.debug(f'{client_alias} or {user_to_blacklist} is not registered as a valid user.')
+            return JSONResponse(content = f'{client_alias} or {user_to_blacklist} is not registered as a valid user.', status_code = 510)
+        else:
+            client_user = users.get(target_alias = client_alias)
+            client_user.add_alias_to_blacklist(alias = user_to_blacklist)
+            return JSONResponse(content = { 'message': 'list of current blacklist users', 
+                                            'list_of_users': client_user.blacklist}, status_code = 201)
+    except:
+        logging.error(f'Unknown Error when blacklisting {user_to_blacklist}.')
+        return JSONResponse(content = { 'message': f'Unknown Error when blacklisting {user_to_blacklist}.' }, status_code = 400)
+
+@app.post("/users/unblacklist_user/", status_code = 201)
+async def unblacklist_user(client_alias: str, user_to_unblacklist: str):
+    """ API for removing a user from the clients blacklist
+    """
+    logging.info('Attempting to get all of the users from the user list...')
+    try:
+        if client_alias not in users.get_all_users_aliases() and user_to_unblacklist not in users.get_all_users_aliases():
+            logging.debug(f'{client_alias} or {user_to_unblacklist} is not registered as a valid user.')
+            return JSONResponse(content = f'{client_alias} or {user_to_unblacklist} is not registered as a valid user.', status_code = 510)
+        else:
+            client_user = users.get(target_alias = client_alias)
+            client_user.remove_alias_from_blacklist(alias = user_to_unblacklist)
+            return JSONResponse(content = { 'message': 'list of current blacklist users', 
+                                            'list_of_users': client_user.blacklist}, status_code = 201)
+    except:
+        logging.error(f'Unknown Error when blacklisting {user_to_unblacklist}.')
+        return JSONResponse(content = { 'message': f'Unknown Error when blacklisting {user_to_unblacklist}.' }, status_code = 400)
+
+@app.post("/users/alias/", status_code = 201)
 async def register_client(client_alias: str):
     """ API for adding a user alias
     """
@@ -185,7 +221,7 @@ async def register_client(client_alias: str):
         logging.error(f'Unknown Error registering a user with the name {client_alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error registering a user with the name {client_alias}.' }, status_code = 400)
 
-@app.post("/users/remove_alias", status_code = 201)
+@app.post("/users/remove_alias/", status_code = 201)
 async def deregister_client(client_alias: str):
     """ API for removing a user
     """
@@ -202,7 +238,7 @@ async def deregister_client(client_alias: str):
         logging.error(f'Unknown Error deregistering a user with the name {client_alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error deregistering a user with the name {client_alias}.' }, status_code = 400)
 
-@app.post("/room", status_code = 201)
+@app.post("/room/", status_code = 201)
 async def create_room(room_name: str, owner_alias: str, room_type: int = ROOM_TYPE_PRIVATE):
     """ API for creating a room
         NOTE: there are edge cases to make sure no duplicates of rooms
@@ -222,7 +258,7 @@ async def create_room(room_name: str, owner_alias: str, room_type: int = ROOM_TY
         logging.error(f'Unknown Error creating a room with name {room_name} by {owner_alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error creating a room with name {room_name} by {owner_alias}.'}, status_code = 400)
 
-@app.post("/room/member", status_code=201)
+@app.post("/room/member/", status_code=201)
 async def add_member(room_name: str, member_name: str):
     if users.get(member_name) is None:
         logging.debug(f'{member_name} is not a valid user.')
@@ -241,7 +277,7 @@ async def add_member(room_name: str, member_name: str):
         logging.debug(f'{member_name} was successflly added as a member to room instance {room_name}')
         return Response(status_code = 201, content = {'message': f'{member_name} was successflly added as a member to room instance {room_name}'})
 
-@app.post("/room/remove_member", status_code=201)
+@app.post("/room/remove_member/", status_code=201)
 async def remove_member(room_name: str, member_name: str):
     if users.get(member_name) is None:
         logging.debug(f'{member_name} is not a valid user.')
@@ -289,7 +325,7 @@ async def send_message(room_name: str, message: str, from_alias: str, to_alias: 
         logging.error(f'Unknown Error when sending {message} to {to_alias}.')
         return JSONResponse(content = { 'message': f'Unknown Error sending {message} to {to_alias}.'}, status_code = 400)
 
-@app.post('/room/remove_message', status_code = 201)
+@app.post('/room/remove_messages/', status_code = 201)
 async def remove_messages(room_name: str, client_alias: str):
     ''' This method will remove a message from the list of messages for a certain user
         NOTE: this method will just set the removed bool to True
@@ -305,8 +341,8 @@ async def remove_messages(room_name: str, client_alias: str):
     else:
         return JSONResponse(content = {'message': f'All of {client_alias} messages have been removed.'}, status_code = 201)
 
-@app.post('/room/restore_message', status_code = 201)
-async def restore_message(room_name: str, client_alias: str):
+@app.post('/room/restore_messages/', status_code = 201)
+async def restore_messages(room_name: str, client_alias: str):
     ''' This method will restore a message from the list of messages for a certain user
     '''
     if client_alias not in users.get_all_users_aliases:
@@ -320,7 +356,7 @@ async def restore_message(room_name: str, client_alias: str):
     else:
         return JSONResponse(content = {'message': f'All of {client_alias} messages have been removed.'}, status_code = 201)
 
-@app.post('/room/edit_message', status_code = 201)
+@app.post('/room/edit_message/', status_code = 201)
 async def edit_message(room_name: str, client_alias: str, message_to_edit: str, new_message: str):
     ''' This method will edit an existing message in a ChatRoom
     '''
