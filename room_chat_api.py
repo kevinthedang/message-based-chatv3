@@ -169,7 +169,7 @@ async def get_users():
         logging.error('Unknown Error obtaining all the users in the user list.')
         return JSONResponse(content = { 'message': 'Unknown Error obtaining all the users in the user list.' }, status_code = 400)
 
-@app.get("/users/blacklist_user/", status_code = 200)
+@app.post("/users/blacklist_user/", status_code = 200)
 async def blacklist_user(client_alias: str, user_to_blacklist: str):
     """ API blacklisting a user
     """
