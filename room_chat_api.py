@@ -10,7 +10,6 @@ from constants import *
 from users import *
 from pydantic import BaseModel
 from passlib.context import CryptContext
-from datetime import timedelta
 
 ''' Task List for this file:
 TODO: Implement a basic authentication: (username and password for this client), 
@@ -185,7 +184,7 @@ async def register_client(client_alias: str):
         return JSONResponse(content = { 'message': f'Unknown Error registering a user with the name {client_alias}.' }, status_code = 400)
 
 @app.post("/users/remove_alias", status_code = 201)
-async def register_client(client_alias: str):
+async def deregister_client(client_alias: str):
     """ API for removing a user
     """
     logging.info(f'Attempting to deregister {client_alias} as a user...')
