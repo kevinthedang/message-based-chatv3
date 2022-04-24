@@ -20,6 +20,7 @@ DEFAULT_OWNER_ALIAS = 'kevin'
 MONGO_DB_TEST = 'detest'
 MONGO_DB = 'cpsc313'
 MONGO_USER_COLLECTION = 'global'
+LOCAL_HOST = 'localhost'
 
 # integer constants
 MONGO_DB_PORT = 27017

@@ -1,3 +1,4 @@
+from concurrent.futures.process import _MAX_WINDOWS_WORKERS
 import logging
 from re import M
 from users import *
@@ -7,6 +8,8 @@ from pymongo import MongoClient, ReturnDocument
 from collections import deque
 from constants import *
 from statsd import StatsClient
+
+STATS_CLIENT = StatsClient(host = LOCAL_HOST, port=8125, prefix='messaging')
 
 ''' Task List for this file:
 TODO: When reading in a message, we may want to move the the sequence number to the chatmessage class
@@ -28,7 +31,7 @@ class MessageProperties():
         self.__to_user = to_user
         self.__from_user = from_user
         self.__sent_time = sent_time
-        self.__rec_time = rec_time     
+        self.__rec_time = rec_time
 
     def to_dict(self):
         logging.error(f'sent time is {self.__sent_time}')
@@ -64,6 +67,10 @@ class MessageProperties():
     @property
     def rec_time(self):
         return self.__rec_time
+
+    @rec_time.setter
+    def rec_time(self, time_value):
+        self.__rec_time = time_value
 
     def __str__(self):
         return str(self.to_dict())
@@ -272,8 +279,8 @@ class ChatRoom(deque):
         '''
         logging.info(f'Calling the put() method with current message being {message} appending to the left of the deque.')
         if message is not None:
-            '''Use this super().insert(POSITION_TO_INSERT, NUMBER_TO_INSERT)'''
-            super().appendleft(message)
+            message_insertion_position = self.__get_insertion_position(message.sequence_num)
+            super().insert(message_insertion_position, message)
             logging.info(f'{message} was appended to the left of the queue.')
 
     # overriding parent and setting block to false so we don't wait for messages if there are none
@@ -290,20 +297,20 @@ class ChatRoom(deque):
             logging.debug(f'Message {message_right} was found on the deque.')
             return message_right
 
-    def find_message(self, user_alias: str, message_text: str) -> ChatMessage:
+    def find_message(self, user_alias: str, message_text: str, any_message: bool = False) -> ChatMessage:
         ''' Traverse through the deque of the Chatroom and find the ChatMessage 
                 with the message_text input from the user.
         '''
         for current_message in list(self):
             if current_message.message == message_text:
                 logging.debug(f'found "{message_text}" in deque.')
-                if current_message.message_properties.from_user in self.__user_list.get(user_alias):
+                if any_message is False and current_message.message_properties.from_user in self.__user_list.get(user_alias):
                     logging.warning(f'The message was from a user from the user_aliases blacklist, aborting.')
                 return current_message
         logging.debug(f'{message_text} was not found in the deque.')
         return None
             
-    def get_messages(self, user_alias: str, num_messages: int = GET_ALL_MESSAGES, return_objects: bool = True):
+    def get_messages(self, user_alias: str, make_clean: bool, return_objects: bool, num_messages: int = GET_ALL_MESSAGES):
         ''' This method will get num_messages from the deque and get their text, objects and a total count of the messages
             NOTE: total # of messages seems to just be num messages, but if getting all then just return the length of the list
             NOTE: indecies 0 and 1 is to access the values in the tuple for the objects and the number of objects
@@ -313,7 +320,7 @@ class ChatRoom(deque):
             logging.warning(f'User with alias {user_alias} is not a member of {self.__room_name}.')
             return [], [], 0
         message_objects = self.__get_message_objects(num_messages = num_messages)
-        cleaned_message_list = self.__clean_messages(message_object_list = message_objects, user_alias = user_alias)
+        cleaned_message_list = self.__clean_messages(message_object_list = message_objects, user_alias = user_alias, make_clean = make_clean)
         if return_objects is True:
             logging.debug('Returning messages with the message objects.')
             if num_messages == GET_ALL_MESSAGES:
@@ -349,20 +356,23 @@ class ChatRoom(deque):
         logging.debug(f'Returning {num_messages} message objects from the deque.')
         return message_objects, len(message_objects)
 
-    def __clean_messages(self, message_object_list: list, user_alias: str = None) -> list:
+    def __clean_messages(self, message_object_list: list, make_clean: bool, user_alias: str = None) -> list:
         ''' This method will be a helper method that will get rid of any messages that are 
             removed or were blacklisted from the user. The helper method checks if they are blacklisted first
-            and then checks if the message was removed.
+            and then checks if the message was removed. The user can also request all messages so they can restore them.
         '''
-        
         cleaned_message_list = list()
         for message_object in message_object_list[0]:
-            if user_alias is None or message_object.message_properties.to_alias is user_alias:
-                if message_object.message_properties.from_alias not in self.__user_list.get(user_alias).blacklist:
-                    if message_object.removed is not True:
-                        cleaned_message_list.append(message_object)
+            if make_clean is False:
+                if user_alias is None or message_object.message_properties.to_user == user_alias:
+                    if message_object.message_properties.from_user not in self.__user_list.get(user_alias).blacklist:
+                        if message_object.removed is not True:
+                            cleaned_message_list.append(message_object)
+            else:
+                cleaned_message_list.append(message_object)
         return cleaned_message_list
 
+    @STATS_CLIENT.timer('send_message')
     def send_message(self, message: str, from_alias: str, mess_props: MessageProperties = None) -> bool:
         ''' This method will send a message to the ChatRoom instance
             TODO: implement a bubble insert helper method in put?
@@ -394,6 +404,7 @@ class ChatRoom(deque):
                 super()[message_object_index].removed = True
                 logging.debug(f'Removed message "{super()[message_object_index].message}" was removed from room instance "{self.__room_name}"')
         logging.info(f'All messages from "{target_alias}" removed from the room instance "{self.__room_name}"')
+        self.persist()
         return True
 
     def restore_message(self, target_alias: str) -> bool:
@@ -407,7 +418,27 @@ class ChatRoom(deque):
                 super()[message_object_index].removed = False
                 logging.debug(f'Restored message "{super()[message_object_index].message}" for room instance "{self.__room_name}"')
         logging.info(f'All messages from "{target_alias}" restored for the room instance "{self.__room_name}"')
+        self.persist()
         return True
+    
+    def edit_message(self, user_alias: str, previous_message: str = None, new_message: str = None) -> bool:
+        ''' This method will find a previous message sent by a user by the entire message, if the entire message is
+            not found, it will not replace the message.
+            TODO: check if the previous message is there
+        '''
+        message_to_edit = self.find_message(user_alias = user_alias, message_text = previous_message, any_message = True)
+        if message_to_edit is None:
+            logging.warning(f'"{previous_message}" was not found in the message list, Process Failed')
+            return False 
+        if user_alias is not message_to_edit.message_properties.from_user:
+            logging.warning(f'User "{user_alias}" is trying to edit a message that is not theirs')
+            return False
+        return self.send_message(message = new_message, from_alias = user_alias, mess_props = MessageProperties(room_name = self.__room_name,
+                                                                                                                to_user = message_to_edit.message_properties.to_user,
+                                                                                                                from_user = user_alias,
+                                                                                                                mess_type = message_to_edit.message_properties.message_type,
+                                                                                                                sent_time = message_to_edit.message_properties.sent_time,
+                                                                                                                rec_time = message_to_edit.message_properties.rec_time)) # rec time will be statsd
 
     def find_member(self, member_alias) -> str:
         ''' This method will find the member within the current ChatRoom instance
@@ -433,6 +464,7 @@ class ChatRoom(deque):
             return MEMBER_FOUND
         self.__member_list.append(member_alias)
         logging.debug(f'"{member_alias}" was added to the member list of "{self.__room_name}"')
+        self.persist()
         return MEMBER_ADDED
 
     def remove_member(self, member_alias):
@@ -442,6 +474,7 @@ class ChatRoom(deque):
         '''
         if member_alias in self.__member_list:
             self.__member_list.remove(member_alias)
+            self.persist()
             logging.debug(f'"{member_alias}" was removed from the member list of room instance "{self.__room_name}"')
         else:
             logging.warning(f'"{member_alias}" was not found in the member list in room instance "{self.__room_name}"')
@@ -509,8 +542,6 @@ class ChatRoom(deque):
         self.__room_id = room_metadata['_id']
         self.__deleted = room_metadata['deleted']
         self.__dirty = False
-        '''Implement sorting algorithm here!!!!!!!!!!!!!!!!!!!!!!!!!----------------------------------'''
-
         for current_message in self.__mongo_collection.find({'message': {'$exists': 'true'}}):
             message_properties = MessageProperties(room_name = current_message['mess_props']['room_name'],
                                                     to_user = current_message['mess_props']['to_user'],
@@ -547,7 +578,8 @@ class ChatRoom(deque):
             logging.debug(f'Chatroom {self.__room_name} metadata has been added to the collection.')
         else:
             if self.__dirty == True:
-                self.__mongo_collection.replace_one({'room_name':self.__room_name,
+                self.__mongo_collection.replace_one(filter = {'room_name': self.__room_name}, 
+                                                    replacement = {'room_name':self.__room_name,
                                                     'owner_alias': self.__owner_alias,
                                                     'room_type': self.__room_type,
                                                     'deleted': self.deleted,
@@ -565,7 +597,6 @@ class ChatRoom(deque):
                     serialized = current_message.to_dict()
                     self.__mongo_collection.insert_one(serialized)
                     current_message.dirty = False
-
 
 class RoomList():
     """ This is the RoomList class instance that will handle a list of ChatRooms and obtaining them.

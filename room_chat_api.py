@@ -42,7 +42,7 @@ async def index():
     return { 'message' : { 'from' : 'kevin', 'to' : 'you :)' }}
 
 @app.get("/messages/", status_code = 200)
-async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_ALL_MESSAGES):
+async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_ALL_MESSAGES, return_objects: bool = True, any_message: bool = True):
     """ API for getting messages from a room
         NOTE: this user must be a valid member of the room to access the messages to the room.
     """
@@ -55,7 +55,7 @@ async def get_messages(alias: str, room_name: str, messages_to_get: int = GET_AL
         logging.warning(f'User {alias} does not exist or they are not a member of the room.')
         return JSONResponse(content = { 'message': f'User {alias} does not exist or they are not a member of the room.'}, status_code = 400)
     try:
-        messages_in_room = room_requested.get_messages(user_alias = alias, num_messages = messages_to_get) # error is here
+        messages_in_room = room_requested.get_messages(user_alias = alias, num_messages = messages_to_get, return_objects = return_objects, make_clean = any_message) # error is here
         if messages_in_room[2] is EMPTY:
             logging.debug(f'Could not get messages in room {room_name}.')
             return JSONResponse(content = { 'message': 
@@ -157,7 +157,9 @@ async def send_message(room_name: str, message: str, from_alias: str, to_alias: 
                                                         mess_props = MessageProperties(room_name = room_name,
                                                                                     to_user = to_alias,
                                                                                     from_user = from_alias,
-                                                                                    mess_type = PRIVATE_MESSAGE))
+                                                                                    mess_type = PRIVATE_MESSAGE,
+                                                                                    sent_time = datetime.now(),
+                                                                                    rec_time = None))
         if request_status is True:
             logging.debug(f'"{message}" was successfully sent to {to_alias} from {from_alias}.')
             return JSONResponse(content = { 'message': f'{message} was successfully sent to {to_alias}.'}, status_code = 201)
