@@ -1,3 +1,4 @@
+from ast import alias
 import logging
 from constants import *
 from datetime import date, datetime
@@ -195,7 +196,15 @@ class UserList():
         if (user := self.get(alias_to_remove)) is None:
             return user
         user.removed = True
-        self.dirty = True
+        self.__persist()
+        return user
+
+    def restore_alias(self, alias_to_restore: str):
+        ''' This method will restore a alias back to being registered
+        '''
+        if (user := self.get(target_alias = alias_to_restore)) is None:
+            return user
+        user.removed = False
         self.__persist()
         return user
 

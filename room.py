@@ -369,8 +369,10 @@ class ChatRoom(deque):
                 if user_alias is None or message_object.message_properties.to_user == user_alias:
                     if message_object.message_properties.from_user not in self.__user_list.get(user_alias).blacklist:
                         if message_object.removed is not True:
+                            message_object.rec_time = datetime.now()
                             cleaned_message_list.append(message_object)
             else:
+                message_object.rec_time = datetime.now()
                 cleaned_message_list.append(message_object)
         return cleaned_message_list
 
