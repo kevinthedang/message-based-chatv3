@@ -7,7 +7,6 @@ from constants import *
 
 ''' Task List for this class: :)
 '''
-
 logging.basicConfig(filename='message_chat.log', level=logging.DEBUG, format = LOG_FORMAT)
         
 class ChatUser():
